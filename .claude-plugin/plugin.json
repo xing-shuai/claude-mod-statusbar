@@ -1,0 +1,10 @@
+{
+  "name": "statusbar",
+  "version": "0.1.0",
+  "description": "One colored status line under the Claude Code prompt: model, effort, context, 5h/7d limits, branch, cost and directory, fitted to the terminal's width. Based on claude-statuspane.",
+  "author": { "name": "xing-shuai", "url": "https://github.com/xing-shuai" },
+  "homepage": "https://github.com/xing-shuai/claude-mod-statusbar",
+  "repository": "https://github.com/xing-shuai/claude-mod-statusbar",
+  "license": "MIT",
+  "keywords": ["statusline", "status", "mod", "ui"]
+}
