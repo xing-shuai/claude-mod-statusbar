@@ -16,8 +16,13 @@ describe('line', () => {
   test('only the context placeholder before the first response', async () => {
     expect(statusText(BASE, NOW)).toBe('◧ —')
   })
+  test('an estimate stands in for the context figure until a response reports one, marked as one', async () => {
+    expect(statusText({ ...BASE, ctxWindow: 1_000_000, ctxEstTokens: 44_300 }, NOW)).toBe('◧ ▱▱▱▱▱▱▱▱ ~4% 44k/1M')
+    expect(statusText({ ...BASE, ctxWindow: 1_000_000, ctxEstTokens: 44_300 }, NOW, 12)).toBe('◧ ~4%')
+    expect(statusText({ ...FULL, ctxEstTokens: 44_300 }, NOW, 12)).toBe('◧ 62%') // a reported figure wins
+  })
   test('every figure on one line when there is room', async () => {
-    expect(statusText(FULL, NOW)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻2h15m  ▦ 91% ↻2d5h  ⎇ develop  $1.50  ~/x')
+    expect(statusText(FULL, NOW)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻ 2h15m  ▦ 91% ↻ 2d5h  ⎇ develop  $1.50  ~/x')
   })
   test('a narrower terminal drops details and the lesser parts first, the context last', async () => {
     expect(statusText(FULL, NOW, 80)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30%  ▦ 91%  ⎇ develop  $1.50')
@@ -27,7 +32,7 @@ describe('line', () => {
     for (let budget = 5; budget <= 120; budget++) expect(cols(statusText(FULL, NOW, budget))).toBeLessThanOrEqual(budget)
   })
   test('a part turned off is left out at any width', async () => {
-    expect(statusText(FULL, NOW, Infinity, new Set(['effort', 'dir', '7d'] as const))).toBe('Opus 5.5 (1M)  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻2h15m  ⎇ develop  $1.50')
+    expect(statusText(FULL, NOW, Infinity, new Set(['effort', 'dir', '7d'] as const))).toBe('Opus 5.5 (1M)  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻ 2h15m  ⎇ develop  $1.50')
     expect(statusRuns(FULL, NOW, Infinity, loadOff(['model', 'effort', 'ctx', '5h', '7d', 'branch', 'cost', 'dir']))).toEqual([])
   })
   test('stored parts: names it does not know are ignored', async () => {
@@ -54,7 +59,8 @@ describe('line', () => {
 const HINT = { plugin: 'statusbar', surface: 'terminal', component: 'PromptHint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } } as never
 
 // The world beneath a started session: the engine's hint line as a Text, the store in `stored`.
-const startSession = async ($: { session: { start: (e: never) => Promise<unknown> } }, on: On, stored: Record<string, unknown> = {}) => {
+const MEASURED = { startedAt: 0, context: { window: 1_000_000, tokens: 420_000, percent: 42 }, rateLimits: [] }
+const startSession = async ($: { session: { start: (e: never) => Promise<unknown> } }, on: On, stored: Record<string, unknown> = {}, usage: () => unknown = () => MEASURED) => {
   const clock = mock.clock(on)
   mock.env(on, { HOME: '/home/u' })
   on('store.get', ($, e) => ({ value: stored[e.key] }) as never)
@@ -64,7 +70,7 @@ const startSession = async ($: { session: { start: (e: never) => Promise<unknown
   })
   on('command.register', () => ({ value: { command: 'statusbar' } }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 420_000, percent: 42 }, rateLimits: [] } }) as never)
+  on('session.usage', () => ({ value: usage() }) as never)
   on('session.cwd', () => ({ value: '/home/u/r' }))
   on('session.repo', () => ({ value: { root: '/home/u/r' } }) as never)
   on('process.run', () => ({ value: { exitCode: 0, stdout: 'main\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
@@ -75,6 +81,7 @@ const startSession = async ($: { session: { start: (e: never) => Promise<unknown
   })
   await $.session.start({ cwd: '/home/u/r', surface: null, isInteractive: true } as never)
   await clock.advance(0) // the directory and branch are read off the start's path
+  return clock
 }
 
 // The status line as drawn: the texts of its runs, in order, or undefined when only the hint line shows.
@@ -128,4 +135,28 @@ test('/statusbar with a word it does not know says what it takes and changes not
   await startSession($, on, stored)
   expect(await $.command.run({ command: 'statusbar', args: 'help' } as never)).toMatchObject({ text: `${STRINGS.usage} Showing: model, effort, ctx, 5h, 7d, branch, cost, dir.` })
   expect(stored).toEqual({})
+})
+
+const SUMMARY = { role: 'user', text: 'summary', toolUses: [] }
+
+test('after a compaction the figure goes, and the engine\'s estimate stands in once the conversation is in place', async ($, on) => {
+  let usage: unknown = MEASURED
+  on('session.compact', () => ({ messages: [SUMMARY], tokensBefore: 420_000, tokensAfter: 17_000 }) as never)
+  const clock = await startSession($, on, {}, () => usage)
+  const ui = await $.ui.mount(HINT)
+  await $.session.compact({ trigger: 'manual', messages: [SUMMARY] } as never)
+  expect(await lineOf(ui)).toBe('Opus 5.5  ◧ —  ⎇ main  ~/r')
+  await clock.advance(1000) // the engine still answers with the response's figure: no estimate of the old window
+  expect(await lineOf(ui)).toBe('Opus 5.5  ◧ —  ⎇ main  ~/r')
+  usage = { startedAt: 0, context: { window: 1_000_000, breakdown: { totalTokens: 44_300 } }, rateLimits: [] }
+  await clock.advance(30_000)
+  expect(await lineOf(ui)).toBe('Opus 5.5  ◧ ▱▱▱▱▱▱▱▱ ~4% 44k/1M  ⎇ main  ~/r')
+  await ui.unmount()
+})
+
+test('a new session shows the estimate before its first response', async ($, on) => {
+  await startSession($, on, {}, () => ({ startedAt: 0, context: { window: 200_000, breakdown: { totalTokens: 21_400 } }, rateLimits: [] }))
+  const ui = await $.ui.mount(HINT)
+  expect(await lineOf(ui)).toBe('Opus 5.5  ◧ ▰▱▱▱▱▱▱▱ ~11% 21k/200k  ⎇ main  ~/r')
+  await ui.unmount()
 })

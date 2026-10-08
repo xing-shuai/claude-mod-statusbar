@@ -7,6 +7,7 @@ export type Limit = { pct: number; resetsAt?: string }
 export type Figures = {
   model: string | null; effort: string | null; dir: string | null; branch: string | null
   ctxPct?: number; ctxTokens?: number; ctxWindow?: number
+  ctxEstTokens?: number // the engine's own estimate, as /context counts: what stands in while no response has reported the fill
   fiveHour?: Limit; week?: Limit; costUsd?: number
 }
 
@@ -24,6 +25,7 @@ const LIMIT_HIGH = 85
 const DEFAULT_COLUMNS = 120 // where the surface has not measured
 const MARGIN = 4 // the hint line's own indent, and a spare column or two
 const REFRESH_MS = 30_000 // the branch may have moved, and the reset countdowns count down
+const SETTLE_MS = 1000 // after a compaction, until the engine has the compacted conversation in place
 
 export const STRINGS = {
   hidden: 'Status line hidden.', shown: 'Status line shown.',
@@ -143,18 +145,22 @@ const limitSeg = (icon: string, l: Limit | undefined, now: number, dropEta: numb
   if (!l) return [GONE]
   const eta = fmtEta(l.resetsAt, now)
   const short: Run[] = [dim(`${icon} `), { text: `${Math.round(l.pct)}%`, color: levelColor(l.pct, LIMIT_WARN, LIMIT_HIGH) }]
-  return [...(eta ? [{ runs: [...short, dim(` ↻${eta}`)], giveUp: dropEta }] : []), { runs: short, giveUp: leave }, GONE]
+  return [...(eta ? [{ runs: [...short, dim(` ↻ ${eta}`)], giveUp: dropEta }] : []), { runs: short, giveUp: leave }, GONE]
 }
 
-// The context never leaves: its last form is the figure alone.
+// The context never leaves: its last form is the figure alone. Before a response has reported the fill
+// (a new session, or one just compacted) the engine's estimate stands in, marked "~".
 const ctxSeg = (f: Figures): Seg => {
-  if (f.ctxPct === undefined) return [{ runs: [dim(`${ICONS.ctx} ${PENDING}`)] }]
+  const est = f.ctxPct === undefined && f.ctxWindow ? f.ctxEstTokens : undefined
+  const pct = f.ctxPct ?? (est !== undefined && f.ctxWindow ? (est * 100) / f.ctxWindow : undefined)
+  if (pct === undefined) return [{ runs: [dim(`${ICONS.ctx} ${PENDING}`)] }]
+  const used = est ?? f.ctxTokens
   const k = (n: number) => (n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`)
-  const level = levelColor(f.ctxPct, CTX_WARN, CTX_HIGH)
-  const figure: Run = { text: `${Math.round(f.ctxPct)}%`, color: level, bold: true }
-  const g = gauge(f.ctxPct, CTX_GAUGE)
+  const level = levelColor(pct, CTX_WARN, CTX_HIGH)
+  const figure: Run = { text: `${est !== undefined ? '~' : ''}${Math.round(pct)}%`, color: level, bold: true }
+  const g = gauge(pct, CTX_GAUGE)
   const bar: Run[] = [dim(`${ICONS.ctx} `), { text: g.on, color: level ?? 'claude' }, { text: g.off, color: 'subtle' }, { text: ' ' }, figure]
-  const tokens = f.ctxTokens !== undefined && f.ctxWindow ? [{ runs: [...bar, dim(` ${k(f.ctxTokens)}/${k(f.ctxWindow)}`)], giveUp: 5 }] : []
+  const tokens = used !== undefined && f.ctxWindow ? [{ runs: [...bar, dim(` ${k(used)}/${k(f.ctxWindow)}`)], giveUp: 5 }] : []
   return [...tokens, { runs: bar, giveUp: 8 }, { runs: [dim(`${ICONS.ctx} `), figure] }]
 }
 
@@ -224,6 +230,18 @@ async function paint($: EngineInterface) {
   }
 }
 
+// Never rejects. The window's fill as /context estimates it, counted locally: no request is sent. Undefined
+// where the engine gives none, and while it still holds a response's figure: the estimate would be of a
+// window about to be replaced.
+async function estimate($: EngineInterface) {
+  try {
+    const { context } = await $.session.usage({ breakdown: 'summary' })
+    return context.tokens === undefined ? context.breakdown?.totalTokens : undefined
+  } catch {
+    return undefined
+  }
+}
+
 // Never rejects; runs off the turn's path (callers do not await it).
 async function refresh($: EngineInterface) {
   try {
@@ -236,6 +254,10 @@ async function refresh($: EngineInterface) {
     figures = { ...figures, dir, branch }
   } catch {
     // keep the last directory and branch
+  }
+  if (figures.ctxPct === undefined) {
+    const ctxEstTokens = await estimate($)
+    figures = { ...figures, ctxEstTokens }
   }
   await paint($)
 }
@@ -287,12 +309,14 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A compaction empties the live window, and no measurement follows until the next response.
+  // A compaction empties the live window, and no measurement follows until the next response: the figure
+  // goes, and the engine's estimate of the compacted conversation stands in once that is in place.
   on('session.compact', async ($, e, next) => {
     const result = await next(e)
     if (!e.agentId && e.trigger !== 'precompute' && !result.skip) {
-      figures = { ...figures, ctxPct: undefined, ctxTokens: undefined }
+      figures = { ...figures, ctxPct: undefined, ctxTokens: undefined, ctxEstTokens: undefined }
       void paint($)
+      $.clock.after(SETTLE_MS, () => void refresh($))
     }
     return result
   })

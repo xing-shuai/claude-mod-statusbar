@@ -7,7 +7,7 @@
       "name": "statusbar",
       "source": "./",
       "description": "One colored status line under the Claude Code prompt, fitted to the terminal's width.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": { "name": "xing-shuai", "url": "https://github.com/xing-shuai" },
       "homepage": "https://github.com/xing-shuai/claude-mod-statusbar",
       "category": "productivity",
