@@ -14,7 +14,8 @@ export type Figures = {
 const EMPTY: Figures = { model: null, effort: null, dir: null, branch: null }
 const SEP = '  ' // each part opens with its icon or reads as a word of its own: no mark between them
 // What stands for a part's name: the context window as far as it is filled, the 5-hour and the weekly limit.
-const ICONS = { ctx: '◧', '5h': '◷', '7d': '▦' } as const
+// `reset` leads a limit's countdown; like the others it is a geometric shape, which terminal fonts draw one cell wide.
+const ICONS = { ctx: '◧', '5h': '◷', '7d': '▦', reset: '▸' } as const
 const PENDING = '—'
 const CTX_GAUGE = 8 // cells of the context gauge
 // Past these a figure takes the theme's warning color, then its error color: statuspane's thresholds.
@@ -145,7 +146,7 @@ const limitSeg = (icon: string, l: Limit | undefined, now: number, dropEta: numb
   if (!l) return [GONE]
   const eta = fmtEta(l.resetsAt, now)
   const short: Run[] = [dim(`${icon} `), { text: `${Math.round(l.pct)}%`, color: levelColor(l.pct, LIMIT_WARN, LIMIT_HIGH) }]
-  return [...(eta ? [{ runs: [...short, dim(` ↻ ${eta}`)], giveUp: dropEta }] : []), { runs: short, giveUp: leave }, GONE]
+  return [...(eta ? [{ runs: [...short, dim(` ${ICONS.reset} ${eta}`)], giveUp: dropEta }] : []), { runs: short, giveUp: leave }, GONE]
 }
 
 // The context never leaves: its last form is the figure alone. Before a response has reported the fill

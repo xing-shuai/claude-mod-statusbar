@@ -22,7 +22,7 @@ describe('line', () => {
     expect(statusText({ ...FULL, ctxEstTokens: 44_300 }, NOW, 12)).toBe('◧ 62%') // a reported figure wins
   })
   test('every figure on one line when there is room', async () => {
-    expect(statusText(FULL, NOW)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻ 2h15m  ▦ 91% ↻ 2d5h  ⎇ develop  $1.50  ~/x')
+    expect(statusText(FULL, NOW)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ▸ 2h15m  ▦ 91% ▸ 2d5h  ⎇ develop  $1.50  ~/x')
   })
   test('a narrower terminal drops details and the lesser parts first, the context last', async () => {
     expect(statusText(FULL, NOW, 80)).toBe('Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30%  ▦ 91%  ⎇ develop  $1.50')
@@ -32,7 +32,7 @@ describe('line', () => {
     for (let budget = 5; budget <= 120; budget++) expect(cols(statusText(FULL, NOW, budget))).toBeLessThanOrEqual(budget)
   })
   test('a part turned off is left out at any width', async () => {
-    expect(statusText(FULL, NOW, Infinity, new Set(['effort', 'dir', '7d'] as const))).toBe('Opus 5.5 (1M)  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻ 2h15m  ⎇ develop  $1.50')
+    expect(statusText(FULL, NOW, Infinity, new Set(['effort', 'dir', '7d'] as const))).toBe('Opus 5.5 (1M)  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ▸ 2h15m  ⎇ develop  $1.50')
     expect(statusRuns(FULL, NOW, Infinity, loadOff(['model', 'effort', 'ctx', '5h', '7d', 'branch', 'cost', 'dir']))).toEqual([])
   })
   test('stored parts: names it does not know are ignored', async () => {

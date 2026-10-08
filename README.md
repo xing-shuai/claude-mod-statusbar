@@ -34,8 +34,8 @@ If you want the card, the CI rows or the progress API, use statuspane.
 | `model` | `Opus 5.5 (1M)` | The model the session is using |
 | `effort` | `high` | Reasoning effort of the current turn |
 | `ctx` | `◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M` | Context window: gauge, percent used, tokens used / window size |
-| `5h` | `◷ 30% ↻ 2h15m` | 5-hour limit: percent used and time until it resets |
-| `7d` | `▦ 91% ↻ 2d5h` | Weekly limit: percent used and time until it resets |
+| `5h` | `◷ 30% ▸ 2h15m` | 5-hour limit: percent used and time until it resets |
+| `7d` | `▦ 91% ▸ 2d5h` | Weekly limit: percent used and time until it resets |
 | `branch` | `⎇ develop` | Current git branch |
 | `cost` | `$1.50` | Session cost so far |
 | `dir` | `~/code/app` | Session directory, shortened when long |
@@ -65,7 +65,7 @@ Colors are theme keys, so the line follows your Claude Code theme (dark, light, 
 The line never wraps. As the terminal narrows, parts give way in this order: the directory, the reset countdowns, the effort, the token counts, the tail of a long branch name, the cost, the gauge, and then whole parts. The context percent is the last thing left.
 
 ```text
-120 columns  Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ↻ 2h15m  ▦ 91% ↻ 2d5h  ⎇ develop  $1.50  ~/x
+120 columns  Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30% ▸ 2h15m  ▦ 91% ▸ 2d5h  ⎇ develop  $1.50  ~/x
  80 columns  Opus 5.5 (1M)  high  ◧ ▰▰▰▰▰▱▱▱ 62% 620k/1M  ◷ 30%  ▦ 91%  ⎇ develop  $1.50
  56 columns  Opus 5.5 (1M)  ◧ ▰▰▰▰▰▱▱▱ 62%  ◷ 30%  ▦ 91%  ⎇ develop
  40 columns  Opus 5.5 (1M)  ◧ 62%  ◷ 30%  ▦ 91%
